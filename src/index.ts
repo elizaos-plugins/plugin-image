@@ -1,17 +1,16 @@
-import type { Plugin } from "@elizaos/core";
 
-import { describeImage } from "./actions/describe-image.ts";
+import { describeImage } from "./actions/describe-image";
 import {
     ImageDescriptionService,
 } from "./services/image";
 
-const browserPlugin: Plugin = {
+const imagePlugin = {
         name: "default",
         description: "Default plugin, with basic actions and evaluators",
         services: [
-            new ImageDescriptionService(),
+            new ImageDescriptionService() as any
         ],
         actions: [describeImage],
     } 
 
-export default browserPlugin;
+export default imagePlugin;

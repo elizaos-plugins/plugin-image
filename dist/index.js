@@ -60,7 +60,7 @@ var describeImage = {
       return false;
     }
     let fileLocation = fileLocationResultObject?.object?.fileLocation;
-    fileLocation ??= fileLocationResultObject;
+    fileLocation ?? (fileLocation = fileLocationResultObject);
     const { description } = await runtime.getService(ServiceType.IMAGE_DESCRIPTION).describeImage(fileLocation);
     runtime.messageManager.createMemory({
       userId: message.agentId,
@@ -143,21 +143,8 @@ var describeImage = {
 };
 
 // src/services/image.ts
-import {
-  elizaLogger as elizaLogger2,
-  getEndpoint,
-  ModelProviderName,
-  models,
-  Service,
-  ServiceType as ServiceType2
-} from "@elizaos/core";
-import {
-  AutoProcessor,
-  AutoTokenizer,
-  env,
-  Florence2ForConditionalGeneration,
-  RawImage
-} from "@huggingface/transformers";
+import { elizaLogger as elizaLogger2, getEndpoint, ModelProviderName, models, Service, ServiceType as ServiceType2 } from "@elizaos/core";
+import { AutoProcessor, AutoTokenizer, env, Florence2ForConditionalGeneration, RawImage } from "@huggingface/transformers";
 import sharp from "sharp";
 import fs from "fs";
 import os from "os";
@@ -169,12 +156,7 @@ var convertToBase64DataUrl = (imageData, mimeType) => {
 };
 var handleApiError = async (response, provider) => {
   const responseText = await response.text();
-  elizaLogger2.error(
-    `${provider} API error:`,
-    response.status,
-    "-",
-    responseText
-  );
+  elizaLogger2.error(`${provider} API error:`, response.status, "-", responseText);
   throw new Error(`HTTP error! status: ${response.status}`);
 };
 var parseImageResponse = (text) => {
@@ -182,10 +164,12 @@ var parseImageResponse = (text) => {
   return { title, description: descriptionParts.join("\n") };
 };
 var LocalImageProvider = class {
-  model = null;
-  processor = null;
-  tokenizer = null;
-  modelId = "onnx-community/Florence-2-base-ft";
+  constructor() {
+    this.model = null;
+    this.processor = null;
+    this.tokenizer = null;
+    this.modelId = "onnx-community/Florence-2-base-ft";
+  }
   async initialize() {
     env.allowLocalModels = false;
     env.allowRemoteModels = true;
@@ -193,27 +177,18 @@ var LocalImageProvider = class {
     env.backends.onnx.wasm.proxy = false;
     env.backends.onnx.wasm.numThreads = 1;
     elizaLogger2.info("Downloading Florence model...");
-    this.model = await Florence2ForConditionalGeneration.from_pretrained(
-      this.modelId,
-      {
-        device: "gpu",
-        progress_callback: (progress) => {
-          if (progress.status === "downloading") {
-            const percent = (progress.loaded / progress.total * 100).toFixed(1);
-            const dots = ".".repeat(
-              Math.floor(Number(percent) / 5)
-            );
-            elizaLogger2.info(
-              `Downloading Florence model: [${dots.padEnd(20, " ")}] ${percent}%`
-            );
-          }
+    this.model = await Florence2ForConditionalGeneration.from_pretrained(this.modelId, {
+      device: "gpu",
+      progress_callback: (progress) => {
+        if (progress.status === "downloading") {
+          const percent = (progress.loaded / progress.total * 100).toFixed(1);
+          const dots = ".".repeat(Math.floor(Number(percent) / 5));
+          elizaLogger2.info(`Downloading Florence model: [${dots.padEnd(20, " ")}] ${percent}%`);
         }
       }
-    );
+    });
     elizaLogger2.info("Downloading processor...");
-    this.processor = await AutoProcessor.from_pretrained(
-      this.modelId
-    );
+    this.processor = await AutoProcessor.from_pretrained(this.modelId);
     elizaLogger2.info("Downloading tokenizer...");
     this.tokenizer = await AutoTokenizer.from_pretrained(this.modelId);
     elizaLogger2.success("Image service initialization complete");
@@ -236,11 +211,7 @@ var LocalImageProvider = class {
     const generatedText = this.tokenizer.batch_decode(generatedIds, {
       skip_special_tokens: false
     })[0];
-    const result = this.processor.post_process_generation(
-      generatedText,
-      "<DETAILED_CAPTION>",
-      image.size
-    );
+    const result = this.processor.post_process_generation(generatedText, "<DETAILED_CAPTION>", image.size);
     const detailedCaption = result["<DETAILED_CAPTION>"];
     return { title: detailedCaption, description: detailedCaption };
   }
@@ -272,13 +243,11 @@ var AnthropicImageProvider = class {
         "x-api-key": apiKey,
         "anthropic-version": "2023-06-01"
       },
-      body: JSON.stringify(
-        {
-          model: "claude-3-haiku-20240307",
-          max_tokens: 1024,
-          messages: [{ role: "user", content }]
-        }
-      )
+      body: JSON.stringify({
+        model: "claude-3-haiku-20240307",
+        max_tokens: 1024,
+        messages: [{ role: "user", content }]
+      })
     });
     if (!response.ok) {
       await handleApiError(response, "Anthropic");
@@ -363,30 +332,27 @@ var GoogleImageProvider = class {
   async describeImage(imageData, mimeType) {
     const endpoint = getEndpoint(ModelProviderName.GOOGLE);
     const apiKey = this.runtime.getSetting("GOOGLE_GENERATIVE_AI_API_KEY");
-    const response = await fetch(
-      `${endpoint}/v1/models/gemini-1.5-pro:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                { text: IMAGE_DESCRIPTION_PROMPT },
-                {
-                  inline_data: {
-                    mime_type: mimeType,
-                    data: imageData.toString("base64")
-                  }
+    const response = await fetch(`${endpoint}/v1/models/gemini-1.5-pro:generateContent?key=${apiKey}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              { text: IMAGE_DESCRIPTION_PROMPT },
+              {
+                inline_data: {
+                  mime_type: mimeType,
+                  data: imageData.toString("base64")
                 }
-              ]
-            }
-          ]
-        })
-      }
-    );
+              }
+            ]
+          }
+        ]
+      })
+    });
     if (!response.ok) {
       await handleApiError(response, "Google Gemini");
     }
@@ -394,11 +360,13 @@ var GoogleImageProvider = class {
     return parseImageResponse(data.candidates[0].content.parts[0].text);
   }
 };
-var ImageDescriptionService = class _ImageDescriptionService extends Service {
-  static serviceType = ServiceType2.IMAGE_DESCRIPTION;
-  initialized = false;
-  runtime = null;
-  provider = null;
+var _ImageDescriptionService = class _ImageDescriptionService extends Service {
+  constructor() {
+    super(...arguments);
+    this.initialized = false;
+    this.runtime = null;
+    this.provider = null;
+  }
   getInstance() {
     return _ImageDescriptionService.getInstance();
   }
@@ -410,13 +378,7 @@ var ImageDescriptionService = class _ImageDescriptionService extends Service {
     if (!this.runtime) {
       throw new Error("Runtime is required for image recognition");
     }
-    const availableModels = [
-      ModelProviderName.LLAMALOCAL,
-      ModelProviderName.ANTHROPIC,
-      ModelProviderName.GOOGLE,
-      ModelProviderName.OPENAI,
-      ModelProviderName.GROQ
-    ].join(", ");
+    const availableModels = [ModelProviderName.LLAMALOCAL, ModelProviderName.ANTHROPIC, ModelProviderName.GOOGLE, ModelProviderName.OPENAI, ModelProviderName.GROQ].join(", ");
     const model = models[this.runtime?.character?.modelProvider];
     if (this.runtime.imageVisionModelProvider) {
       if (this.runtime.imageVisionModelProvider === ModelProviderName.LLAMALOCAL || this.runtime.imageVisionModelProvider === ModelProviderName.OLLAMA) {
@@ -435,9 +397,7 @@ var ImageDescriptionService = class _ImageDescriptionService extends Service {
         this.provider = new GroqImageProvider(this.runtime);
         elizaLogger2.debug("Using Groq for vision model");
       } else {
-        elizaLogger2.warn(
-          `Unsupported image vision model provider: ${this.runtime.imageVisionModelProvider}. Please use one of the following: ${availableModels}. Update the 'imageVisionModelProvider' field in the character file.`
-        );
+        elizaLogger2.warn(`Unsupported image vision model provider: ${this.runtime.imageVisionModelProvider}. Please use one of the following: ${availableModels}. Update the 'imageVisionModelProvider' field in the character file.`);
         return false;
       }
     } else if (model === models[ModelProviderName.LLAMALOCAL] || model === models[ModelProviderName.OLLAMA]) {
@@ -459,9 +419,7 @@ var ImageDescriptionService = class _ImageDescriptionService extends Service {
     try {
       await this.provider.initialize();
     } catch {
-      elizaLogger2.error(
-        `Failed to initialize the image vision model provider: ${this.runtime.imageVisionModelProvider}`
-      );
+      elizaLogger2.error(`Failed to initialize the image vision model provider: ${this.runtime.imageVisionModelProvider}`);
       return false;
     }
     return true;
@@ -475,10 +433,7 @@ var ImageDescriptionService = class _ImageDescriptionService extends Service {
       loadedImageData = imageData;
       loadedMimeType = mimeType;
     } else {
-      const converted = await this.convertImageDataToFormat(
-        imageData,
-        "png"
-      );
+      const converted = await this.convertImageDataToFormat(imageData, "png");
       loadedImageData = converted.imageData;
       loadedMimeType = converted.mimeType;
     }
@@ -488,10 +443,7 @@ var ImageDescriptionService = class _ImageDescriptionService extends Service {
     return { data: loadedImageData, mimeType: loadedMimeType };
   }
   async convertImageDataToFormat(data, format = "png") {
-    const tempFilePath = path.join(
-      os.tmpdir(),
-      `tmp_img_${Date.now()}.${format}`
-    );
+    const tempFilePath = path.join(os.tmpdir(), `tmp_img_${Date.now()}.${format}`);
     try {
       await sharp(data).toFormat(format).toFile(tempFilePath);
       const { imageData, mimeType } = await this.fetchImage(tempFilePath);
@@ -513,9 +465,7 @@ var ImageDescriptionService = class _ImageDescriptionService extends Service {
     } else {
       const response = await fetch(imageUrlOrPath);
       if (!response.ok) {
-        throw new Error(
-          `Failed to fetch image: ${response.statusText}`
-        );
+        throw new Error(`Failed to fetch image: ${response.statusText}`);
       }
       imageData = Buffer.from(await response.arrayBuffer());
       mimeType = response.headers.get("content-type") || "image/jpeg";
@@ -537,19 +487,20 @@ var ImageDescriptionService = class _ImageDescriptionService extends Service {
     }
   }
 };
+_ImageDescriptionService.serviceType = ServiceType2.IMAGE_DESCRIPTION;
+var ImageDescriptionService = _ImageDescriptionService;
 
 // src/index.ts
-function createNodePlugin() {
-  return {
-    name: "default",
-    description: "Default plugin, with basic actions and evaluators",
-    services: [
-      new ImageDescriptionService()
-    ],
-    actions: [describeImage]
-  };
-}
+var imagePlugin = {
+  name: "default",
+  description: "Default plugin, with basic actions and evaluators",
+  services: [
+    new ImageDescriptionService()
+  ],
+  actions: [describeImage]
+};
+var index_default = imagePlugin;
 export {
-  createNodePlugin
+  index_default as default
 };
 //# sourceMappingURL=index.js.map
