@@ -42,6 +42,7 @@ var describeImage = {
   },
   description: "Describe an image",
   handler: async (runtime, message, state, _options, callback) => {
+    var _a;
     const getFileLocationContext = composeContext({
       state,
       template: getFileLocationTemplate
@@ -54,13 +55,13 @@ var describeImage = {
       stop: ["\n"]
     });
     if (!isFileLocationResult(
-      fileLocationResultObject?.object ?? fileLocationResultObject
+      (fileLocationResultObject == null ? void 0 : fileLocationResultObject.object) ?? fileLocationResultObject
     )) {
       elizaLogger.error("Failed to generate file location");
       return false;
     }
-    let fileLocation = fileLocationResultObject?.object?.fileLocation;
-    fileLocation ?? (fileLocation = fileLocationResultObject);
+    let fileLocation = (_a = fileLocationResultObject == null ? void 0 : fileLocationResultObject.object) == null ? void 0 : _a.fileLocation;
+    fileLocation ??= fileLocationResultObject;
     const { description } = await runtime.getService(ServiceType.IMAGE_DESCRIPTION).describeImage(fileLocation);
     runtime.messageManager.createMemory({
       userId: message.agentId,
@@ -164,12 +165,10 @@ var parseImageResponse = (text) => {
   return { title, description: descriptionParts.join("\n") };
 };
 var LocalImageProvider = class {
-  constructor() {
-    this.model = null;
-    this.processor = null;
-    this.tokenizer = null;
-    this.modelId = "onnx-community/Florence-2-base-ft";
-  }
+  model = null;
+  processor = null;
+  tokenizer = null;
+  modelId = "onnx-community/Florence-2-base-ft";
   async initialize() {
     env.allowLocalModels = false;
     env.allowRemoteModels = true;
@@ -360,13 +359,11 @@ var GoogleImageProvider = class {
     return parseImageResponse(data.candidates[0].content.parts[0].text);
   }
 };
-var _ImageDescriptionService = class _ImageDescriptionService extends Service {
-  constructor() {
-    super(...arguments);
-    this.initialized = false;
-    this.runtime = null;
-    this.provider = null;
-  }
+var ImageDescriptionService = class _ImageDescriptionService extends Service {
+  static serviceType = ServiceType2.IMAGE_DESCRIPTION;
+  initialized = false;
+  runtime = null;
+  provider = null;
   getInstance() {
     return _ImageDescriptionService.getInstance();
   }
@@ -375,11 +372,12 @@ var _ImageDescriptionService = class _ImageDescriptionService extends Service {
     this.runtime = runtime;
   }
   async initializeProvider() {
+    var _a, _b;
     if (!this.runtime) {
       throw new Error("Runtime is required for image recognition");
     }
     const availableModels = [ModelProviderName.LLAMALOCAL, ModelProviderName.ANTHROPIC, ModelProviderName.GOOGLE, ModelProviderName.OPENAI, ModelProviderName.GROQ].join(", ");
-    const model = models[this.runtime?.character?.modelProvider];
+    const model = models[(_b = (_a = this.runtime) == null ? void 0 : _a.character) == null ? void 0 : _b.modelProvider];
     if (this.runtime.imageVisionModelProvider) {
       if (this.runtime.imageVisionModelProvider === ModelProviderName.LLAMALOCAL || this.runtime.imageVisionModelProvider === ModelProviderName.OLLAMA) {
         this.provider = new LocalImageProvider();
@@ -487,8 +485,6 @@ var _ImageDescriptionService = class _ImageDescriptionService extends Service {
     }
   }
 };
-_ImageDescriptionService.serviceType = ServiceType2.IMAGE_DESCRIPTION;
-var ImageDescriptionService = _ImageDescriptionService;
 
 // src/index.ts
 var imagePlugin = {
